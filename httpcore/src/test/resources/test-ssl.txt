@@ -23,7 +23,7 @@
 # <http://www.apache.org/>.
 
 
-*** Use Java 11 or older ***
+*** Use Java 17 or newer ***
 
 == generate test key store with a self signed key
 
@@ -139,6 +139,13 @@ keytool -genkeypair \
   -validity 100000 \
   -dname "CN=Test Client 2, OU=HttpComponents Project, O=Apache Software Foundation"
 ---
+keytool -genkeypair \
+  -keystore test-client-eddsa.p12 -storepass nopassword \
+  -keyalg eddsa -keysize 255 \
+  -alias client3 \
+  -validity 100000 \
+  -dname "CN=Test Client 3, OU=HttpComponents Project, O=Apache Software Foundation"
+---
 
 == create client certificate signing requests
 
@@ -152,6 +159,11 @@ keytool -certreq \
   -keystore test-client.p12 -storepass nopassword \
   -alias client2 \
   -file client2.csr
+---
+keytool -certreq \
+  -keystore test-client-eddsa.p12 -storepass nopassword \
+  -alias client3 \
+  -file client3.csr
 ---
 
 == sign client certificates
@@ -177,6 +189,16 @@ keytool -gencert \
   -ext SAN="EMAIL:test-client-2@hc.apache.org" \
   -rfc
 ---
+keytool -gencert \
+  -keystore ca.p12 -storepass nopassword -keypass password \
+  -alias ca \
+  -validity 100000 \
+  -infile client3.csr \
+  -outfile client3.crt \
+  -ext EKU="clientAuth" \
+  -ext SAN="EMAIL:test-client-3@hc.apache.org" \
+  -rfc
+---
 
 == import CA root certificate and signed server certificate
 
@@ -195,5 +217,24 @@ keytool -importcert \
   -keystore test-client.p12 -storepass nopassword \
   -file client2.crt \
   -alias client2
+---
+keytool -importcert \
+  -keystore test-client-eddsa.p12 -storepass nopassword \
+  -file test-ca.crt \
+  -alias caroot
+---
+keytool -importcert \
+  -keystore test-client-eddsa.p12 -storepass nopassword \
+  -file client3.crt \
+  -alias client3
+---
+
+== import CA root certificate only
+
+---
+keytool -importcert \
+  -keystore test-trust.p12 -storepass nopassword \
+  -file test-ca.crt \
+  -alias caroot
 ---
 

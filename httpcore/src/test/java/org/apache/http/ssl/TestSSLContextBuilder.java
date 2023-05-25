@@ -746,4 +746,62 @@ public class TestSSLContextBuilder {
         Assert.assertEquals(PROVIDER_SUN_JSSE,  sslContext.getProvider().getName());
     }
 
+    @Test
+    public void testEdDsaClientCertifiate() throws Exception {
+        final URL truststore = getResource("/test-trust.p12");
+        final URL serverKeystore = getResource("/test-server.keystore");
+        final String storePassword = "nopassword";
+        final String keyPassword = "nopassword";
+        final SSLContext serverSslContext = SSLContextBuilder.create()
+                .loadTrustMaterial(truststore, storePassword.toCharArray())
+                .loadKeyMaterial(serverKeystore, storePassword.toCharArray(), keyPassword.toCharArray())
+                .build();
+        Assert.assertNotNull(serverSslContext);
+
+        final URL clientKeystore = getResource("/test-client-eddsa.p12");
+        final SSLContext clientSslContext = SSLContextBuilder.create()
+                .loadTrustMaterial(truststore, storePassword.toCharArray())
+                .loadKeyMaterial(clientKeystore, storePassword.toCharArray(), storePassword.toCharArray())
+                .build();
+        Assert.assertNotNull(clientSslContext);
+        final SSLServerSocket serverSocket = (SSLServerSocket) serverSslContext.getServerSocketFactory().createServerSocket();
+        serverSocket.setNeedClientAuth(true);
+        serverSocket.bind(new InetSocketAddress(0));
+
+        this.executorService = Executors.newSingleThreadExecutor();
+        final Future<Principal> clientPrincipalFuture = this.executorService.submit(new Callable<Principal>() {
+            @Override
+            public Principal call() throws Exception {
+                final SSLSocket socket = (SSLSocket) serverSocket.accept();
+                try {
+                    final SSLSession session = socket.getSession();
+                    final Principal clientPrincipal = session.getPeerPrincipal();
+                    final OutputStream outputStream = socket.getOutputStream();
+                    outputStream.write(new byte[]{'H', 'i'});
+                    outputStream.flush();
+                    return clientPrincipal;
+                } finally {
+                    socket.close();
+                }
+            }
+        });
+        final int localPort = serverSocket.getLocalPort();
+        final SSLSocket clientSocket = (SSLSocket) clientSslContext.getSocketFactory().createSocket();
+        try {
+            clientSocket.connect(new InetSocketAddress("localhost", localPort), TIMEOUT);
+            clientSocket.setSoTimeout(TIMEOUT);
+            clientSocket.startHandshake();
+            final InputStream inputStream = clientSocket.getInputStream();
+            Assert.assertEquals('H', inputStream.read());
+            Assert.assertEquals('i', inputStream.read());
+            Assert.assertEquals(-1, inputStream.read());
+        } finally {
+            clientSocket.close();
+        }
+
+        final Principal clientPrincipal = clientPrincipalFuture.get(5, TimeUnit.SECONDS);
+        Assert.assertNotNull(clientPrincipal);
+        Assert.assertEquals("CN=Test Client 3,OU=HttpComponents Project,O=Apache Software Foundation", clientPrincipal.getName());
+    }
+
 }
