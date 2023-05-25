@@ -66,6 +66,7 @@ import javax.net.ssl.TrustManagerFactory;
 
 import org.junit.After;
 import org.junit.Assert;
+import org.junit.Assume;
 import org.junit.Rule;
 import org.junit.Test;
 import org.junit.rules.ExpectedException;
@@ -79,6 +80,10 @@ public class TestSSLContextBuilder {
 
     private static boolean isWindows() {
         return System.getProperty("os.name").contains("Windows");
+    }
+
+    private static boolean supportsEddsa() {
+        return Security.getAlgorithms("KeyFactory").contains("EDDSA");
     }
 
     @Rule
@@ -748,8 +753,9 @@ public class TestSSLContextBuilder {
 
     @Test
     public void testEdDsaClientCertifiate() throws Exception {
+        Assume.assumeTrue(supportsEddsa());
         final URL truststore = getResource("/test-trust.p12");
-        final URL serverKeystore = getResource("/test-server.keystore");
+        final URL serverKeystore = getResource("/test-server.p12");
         final String storePassword = "nopassword";
         final String keyPassword = "nopassword";
         final SSLContext serverSslContext = SSLContextBuilder.create()
@@ -761,11 +767,12 @@ public class TestSSLContextBuilder {
         final URL clientKeystore = getResource("/test-client-eddsa.p12");
         final SSLContext clientSslContext = SSLContextBuilder.create()
                 .loadTrustMaterial(truststore, storePassword.toCharArray())
-                .loadKeyMaterial(clientKeystore, storePassword.toCharArray(), storePassword.toCharArray())
+                .loadKeyMaterial(clientKeystore, storePassword.toCharArray(), keyPassword.toCharArray())
                 .build();
         Assert.assertNotNull(clientSslContext);
         final SSLServerSocket serverSocket = (SSLServerSocket) serverSslContext.getServerSocketFactory().createServerSocket();
         serverSocket.setNeedClientAuth(true);
+        serverSocket.setEnabledProtocols(new String[] {"TLSv1.2"});
         serverSocket.bind(new InetSocketAddress(0));
 
         this.executorService = Executors.newSingleThreadExecutor();
